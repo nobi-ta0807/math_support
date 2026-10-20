@@ -1,0 +1,759 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MathCards</title>
+
+<link rel="stylesheet"
+ href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css">
+<script defer
+ src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"></script>
+
+<style>
+:root {
+  --bg:#f5f6fa;
+  --panel:#fff;
+  --text:#202534;
+  --muted:#727b8d;
+  --border:#e2e5ed;
+  --primary:#4263eb;
+}
+* { box-sizing:border-box; }
+body {
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:system-ui,sans-serif;
+}
+button,input,select,textarea {
+  font:inherit;
+}
+button {
+  cursor:pointer;
+  border:1px solid var(--border);
+  background:white;
+  border-radius:9px;
+  padding:9px 13px;
+  color:var(--text);
+}
+button:hover { background:#edf0ff; }
+button.primary {
+  background:var(--primary);
+  color:white;
+  border-color:var(--primary);
+}
+button.danger { color:#d43d48; }
+input,select,textarea {
+  border:1px solid var(--border);
+  border-radius:9px;
+  padding:11px;
+  background:white;
+  color:var(--text);
+  width:100%;
+}
+textarea { min-height:110px; resize:vertical; }
+.app {
+  display:flex;
+  min-height:100vh;
+}
+.sidebar {
+  width:225px;
+  background:var(--panel);
+  border-right:1px solid var(--border);
+  padding:20px 12px;
+  flex-shrink:0;
+}
+.logo {
+  font-size:23px;
+  font-weight:800;
+  padding:12px;
+  color:var(--primary);
+}
+.nav {
+  display:block;
+  width:100%;
+  text-align:left;
+  margin:5px 0;
+  border:none;
+}
+.nav.active {
+  background:#e9edff;
+  color:var(--primary);
+  font-weight:700;
+}
+main {
+  width:100%;
+  max-width:1100px;
+  padding:30px;
+  margin:auto;
+  align-self:flex-start;
+}
+.header {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin-bottom:24px;
+}
+h1 { font-size:26px; margin:0; }
+h2 { font-size:20px; }
+.card {
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:15px;
+  padding:22px;
+  margin-bottom:15px;
+}
+.card-item { cursor:pointer; }
+.card-item:hover { border-color:var(--primary); }
+.muted { color:var(--muted); }
+.row {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  flex-wrap:wrap;
+}
+.space { justify-content:space-between; }
+.grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+  gap:14px;
+}
+.field { margin:18px 0; }
+.field label {
+  display:block;
+  font-weight:650;
+  margin-bottom:8px;
+}
+.editor {
+  border:1px solid var(--border);
+  border-radius:10px;
+  min-height:110px;
+  padding:13px;
+  outline:none;
+  overflow-wrap:anywhere;
+}
+.editor:focus { border-color:var(--primary); }
+.toolbar {
+  display:flex;
+  gap:5px;
+  flex-wrap:wrap;
+  margin-bottom:7px;
+}
+.toolbar button { padding:6px 11px; }
+.math {
+  display:inline-block;
+  padding:2px 4px;
+}
+.tag {
+  display:inline-block;
+  background:#eef0f6;
+  border-radius:7px;
+  padding:4px 9px;
+  font-size:12px;
+  margin:3px;
+}
+.review-card {
+  min-height:250px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  cursor:pointer;
+  text-align:center;
+}
+.review-card .content {
+  font-size:19px;
+  width:100%;
+}
+.hidden { display:none!important; }
+.empty {
+  text-align:center;
+  padding:55px 10px;
+  color:var(--muted);
+}
+.content img,.editor img { max-width:100%; }
+.content { overflow-wrap:anywhere; }
+.content p { margin:8px 0; }
+.content .katex-display { overflow-x:auto; }
+@media(max-width:700px) {
+  .app { display:block; }
+  .sidebar {
+    width:100%;
+    border-right:none;
+    border-bottom:1px solid var(--border);
+    padding:8px;
+  }
+  .logo { padding:5px 10px; }
+  .nav {
+    width:auto;
+    display:inline-block;
+    font-size:13px;
+    padding:8px;
+  }
+  main { padding:17px; }
+  .card { padding:16px; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="logo">▣ MathCards</div>
+    <button class="nav active" data-page="home">⌂ ホーム</button>
+    <button class="nav" data-page="list">▤ 解法一覧</button>
+    <button class="nav" data-page="review">▣ 復習</button>
+    <button class="nav" data-page="settings">⚙ 設定</button>
+    <button class="primary" style="width:100%;margin-top:18px"
+      onclick="newCard()">＋ 新しいカード</button>
+  </aside>
+
+  <main id="main"></main>
+</div>
+
+<input type="file" id="importFile" accept=".json"
+ class="hidden">
+
+<script>
+"use strict";
+
+const KEY = "mathcards_data_v1";
+
+let db = {
+  cards: [],
+  folders: ["未分類","場合の数・確率","数列","微分積分"]
+};
+
+let currentPage = "home";
+let currentId = null;
+let reviewList = [];
+let reviewIndex = 0;
+let reviewFlipped = false;
+
+function uid() {
+  return crypto.randomUUID
+    ? crypto.randomUUID()
+    : Date.now().toString(36)+Math.random().toString(36);
+}
+
+function save() {
+  try {
+    localStorage.setItem(KEY,JSON.stringify(db));
+    return true;
+  } catch(e) {
+    alert("保存に失敗しました。容量やブラウザの設定を確認してください。");
+    return false;
+  }
+}
+
+function load() {
+  try {
+    const data = JSON.parse(localStorage.getItem(KEY));
+    if(data && Array.isArray(data.cards)
+      && Array.isArray(data.folders)) {
+      db = data;
+    }
+  } catch(e) {
+    console.error("読み込み失敗",e);
+  }
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",
+    '"':"&quot;","'":"&#39;"
+  })[c]);
+}
+
+function cleanHTML(html) {
+  const doc = new DOMParser().parseFromString(html,"text/html");
+  const allowed = new Set([
+    "B","STRONG","I","EM","U","S","P","BR",
+    "DIV","UL","OL","LI","H2","H3","BLOCKQUOTE",
+    "SPAN"
+  ]);
+  function walk(node) {
+    for(const child of [...node.children]) {
+      walk(child);
+      if(!allowed.has(child.tagName)) {
+        child.replaceWith(...child.childNodes);
+      } else {
+        for(const a of [...child.attributes]) {
+          child.removeAttribute(a.name);
+        }
+      }
+    }
+  }
+  walk(doc.body);
+  return doc.body.innerHTML;
+}
+
+function renderMath(root=document) {
+  if(!window.katex) return;
+  root.querySelectorAll(".math").forEach(el=>{
+    const latex=el.dataset.latex;
+    if(!latex) return;
+    try {
+      katex.render(latex,el,{
+        throwOnError:false,
+        displayMode:el.dataset.display==="true"
+      });
+    } catch(e) {
+      el.textContent=latex;
+    }
+  });
+}
+
+function contentHTML(html) {
+  return cleanHTML(html||"");
+}
+
+function page(name) {
+  currentPage=name;
+  document.querySelectorAll(".nav").forEach(b=>{
+    b.classList.toggle("active",b.dataset.page===name);
+  });
+  if(name==="home") home();
+  if(name==="list") list();
+  if(name==="review") startReview();
+  if(name==="settings") settings();
+}
+
+function home() {
+  const count=db.cards.length;
+  const complete=db.cards.filter(c=>c.front&&c.back).length;
+  document.getElementById("main").innerHTML=`
+    <div class="header">
+      <h1>ホーム</h1>
+      <button class="primary" onclick="newCard()">＋ カード作成</button>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <div class="muted">登録した解法</div>
+        <h1>${count}</h1>
+      </div>
+      <div class="card">
+        <div class="muted">復習できるカード</div>
+        <h1>${complete}</h1>
+      </div>
+    </div>
+    <div class="card">
+      <h2>数学の解法を整理しよう</h2>
+      <p class="muted">
+        表面に問い、裏面に解法、
+        詳細ノートに証明や具体例を記録できます。
+      </p>
+      <div class="row">
+        <button class="primary" onclick="newCard()">カードを作る</button>
+        <button onclick="page('review')">復習する</button>
+      </div>
+    </div>
+    <h2>最近のカード</h2>
+    <div id="recent"></div>
+  `;
+  const recent=[...db.cards]
+    .sort((a,b)=>b.updated-a.updated).slice(0,5);
+  document.getElementById("recent").innerHTML=
+    recent.length
+    ? recent.map(cardItem).join("")
+    : '<div class="empty">まだカードがありません。</div>';
+}
+
+function cardItem(c) {
+  return `
+    <div class="card card-item"
+      onclick="viewCard('${c.id}')">
+      <div class="row space">
+        <strong>${esc(c.title||"無題のカード")}</strong>
+        <span class="tag">${esc(c.folder||"未分類")}</span>
+      </div>
+      <div class="muted" style="margin-top:10px">
+        ${esc(c.tags||"")}
+      </div>
+    </div>
+  `;
+}
+
+function list() {
+  document.getElementById("main").innerHTML=`
+    <div class="header">
+      <h1>解法一覧</h1>
+      <button class="primary" onclick="newCard()">＋ 新規</button>
+    </div>
+    <div class="row" style="margin-bottom:18px">
+      <input id="search" placeholder="解法を検索..."
+        oninput="filterCards()" style="flex:2;min-width:160px">
+      <select id="folderFilter" onchange="filterCards()"
+        style="flex:1;min-width:130px">
+        <option value="">すべてのフォルダ</option>
+        ${db.folders.map(f=>
+          `<option value="${esc(f)}">${esc(f)}</option>`
+        ).join("")}
+      </select>
+    </div>
+    <div id="cardList"></div>
+  `;
+  filterCards();
+}
+
+function filterCards() {
+  const q=document.getElementById("search").value.toLowerCase();
+  const f=document.getElementById("folderFilter").value;
+  const cards=db.cards.filter(c=>{
+    const text=[
+      c.title,c.front,c.back,c.note,c.tags
+    ].join(" ").replace(/<[^>]*>/g," ").toLowerCase();
+    return text.includes(q)&&(!f||c.folder===f);
+  });
+  document.getElementById("cardList").innerHTML=
+    cards.length
+    ? cards.map(cardItem).join("")
+    : '<div class="empty">該当するカードがありません。</div>';
+}
+
+function newCard() {
+  currentId=null;
+  editCard();
+}
+
+function getCard() {
+  return db.cards.find(c=>c.id===currentId);
+}
+
+function viewCard(id) {
+  currentId=id;
+  const c=getCard();
+  if(!c) return page("list");
+  currentPage="view";
+  document.getElementById("main").innerHTML=`
+    <div class="header">
+      <button onclick="page('list')">← 一覧</button>
+      <div class="row">
+        <button onclick="duplicateCard()">複製</button>
+        <button onclick="editCard()">編集</button>
+      </div>
+    </div>
+    <h1>${esc(c.title||"無題のカード")}</h1>
+    <p>
+      <span class="tag">${esc(c.folder)}</span>
+      ${esc(c.tags||"").split(",").filter(Boolean)
+        .map(t=>`<span class="tag">${esc(t.trim())}</span>`).join("")}
+    </p>
+    <div class="card">
+      <h2>表面</h2>
+      <div class="content">${contentHTML(c.front)}</div>
+    </div>
+    <div class="card">
+      <h2>裏面</h2>
+      <div class="content">${contentHTML(c.back)}</div>
+    </div>
+    <div class="card">
+      <h2>詳細ノート</h2>
+      <div class="content">${contentHTML(c.note)}</div>
+    </div>
+    <button class="danger" onclick="deleteCard()">カードを削除</button>
+  `;
+  renderMath();
+}
+
+function editCard() {
+  const c=getCard()||{
+    title:"",front:"",back:"",note:"",
+    folder:"未分類",tags:""
+  };
+  currentPage="edit";
+  document.getElementById("main").innerHTML=`
+    <div class="header">
+      <h1>${currentId?"カード編集":"新しいカード"}</h1>
+      <button onclick="commitCard()">保存して戻る</button>
+    </div>
+    <div class="field">
+      <label>タイトル</label>
+      <input id="title" value="${esc(c.title)}"
+        placeholder="例：余事象を利用する確率">
+    </div>
+    ${editorField("front","表面（問い）",c.front)}
+    ${editorField("back","裏面（解法）",c.back)}
+    ${editorField("note","詳細ノート",c.note)}
+    <div class="field">
+      <label>フォルダ</label>
+      <select id="folder">
+        ${db.folders.map(f=>`
+          <option value="${esc(f)}"
+            ${f===c.folder?"selected":""}>${esc(f)}</option>
+        `).join("")}
+      </select>
+    </div>
+    <div class="field">
+      <label>タグ（カンマ区切り）</label>
+      <input id="tags" value="${esc(c.tags)}"
+        placeholder="例：順列, 場合分け">
+    </div>
+    <div class="row">
+      <button class="primary" onclick="commitCard()">保存</button>
+      <button onclick="page('list')">キャンセル</button>
+    </div>
+  `;
+}
+
+function editorField(id,label,value) {
+  return `
+    <div class="field">
+      <label>${label}</label>
+      <div class="toolbar">
+        <button type="button" onmousedown="event.preventDefault()"
+          onclick="format('${id}','bold')"><b>B</b></button>
+        <button type="button" onmousedown="event.preventDefault()"
+          onclick="format('${id}','italic')"><i>I</i></button>
+        <button type="button" onmousedown="event.preventDefault()"
+          onclick="format('${id}','underline')"><u>U</u></button>
+        <button type="button" onmousedown="event.preventDefault()"
+          onclick="insertMath('${id}')">∑ 数式</button>
+      </div>
+      <div class="editor" id="${id}" contenteditable="true"
+        data-placeholder="ここに入力">${contentHTML(value)}</div>
+    </div>
+  `;
+}
+
+function format(id,cmd) {
+  document.getElementById(id).focus();
+  document.execCommand(cmd,false,null);
+}
+
+function insertMath(id) {
+  const latex=prompt(
+    "LaTeX形式で数式を入力してください",
+    "\\frac{a}{b}"
+  );
+  if(latex===null||!latex.trim()) return;
+  const span=document.createElement("span");
+  span.className="math";
+  span.dataset.latex=latex;
+  span.contentEditable="false";
+  span.textContent=latex;
+  const ed=document.getElementById(id);
+  ed.focus();
+  const sel=window.getSelection();
+  if(sel.rangeCount && ed.contains(sel.anchorNode)) {
+    const range=sel.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(span);
+    range.setStartAfter(span);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    ed.appendChild(span);
+  }
+  renderMath(ed);
+}
+
+function commitCard() {
+  const now=Date.now();
+  const values={
+    title:document.getElementById("title").value.trim(),
+    front:document.getElementById("front").innerHTML,
+    back:document.getElementById("back").innerHTML,
+    note:document.getElementById("note").innerHTML,
+    folder:document.getElementById("folder").value,
+    tags:document.getElementById("tags").value,
+    updated:now
+  };
+  if(!values.title) {
+    alert("タイトルを入力してください。");
+    return;
+  }
+  if(currentId) {
+    Object.assign(getCard(),values);
+  } else {
+    currentId=uid();
+    db.cards.push({
+      id:currentId,
+      created:now,
+      reviews:[],
+      ...values
+    });
+  }
+  if(save()) viewCard(currentId);
+}
+
+function duplicateCard() {
+  const c=getCard();
+  if(!c) return;
+  const copy=structuredClone(c);
+  copy.id=uid();
+  copy.title+="（コピー）";
+  copy.created=Date.now();
+  copy.updated=Date.now();
+  copy.reviews=[];
+  db.cards.push(copy);
+  if(save()) viewCard(copy.id);
+}
+
+function deleteCard() {
+  if(!confirm("このカードを削除しますか？")) return;
+  db.cards=db.cards.filter(c=>c.id!==currentId);
+  if(save()) page("list");
+}
+
+function startReview() {
+  reviewList=db.cards.filter(c=>
+    c.front && c.back &&
+    c.front.replace(/<[^>]+>/g,"").trim() &&
+    c.back.replace(/<[^>]+>/g,"").trim()
+  ).sort(()=>Math.random()-0.5);
+  reviewIndex=0;
+  reviewFlipped=false;
+  currentPage="review";
+  showReview();
+}
+
+function showReview() {
+  const main=document.getElementById("main");
+  if(!reviewList.length) {
+    main.innerHTML=`
+      <h1>復習</h1>
+      <div class="empty">復習できるカードがありません。</div>`;
+    return;
+  }
+  if(reviewIndex>=reviewList.length) {
+    main.innerHTML=`
+      <h1>復習完了！</h1>
+      <div class="card">
+        <p>すべてのカードを確認しました。</p>
+        <button onclick="startReview()">もう一度</button>
+      </div>`;
+    return;
+  }
+  const c=reviewList[reviewIndex];
+  main.innerHTML=`
+    <div class="header">
+      <h1>復習</h1>
+      <span class="muted">${reviewIndex+1}/${reviewList.length}</span>
+    </div>
+    <div class="card review-card" onclick="flipReview()">
+      <span class="tag">${reviewFlipped?"裏面":"表面"}</span>
+      <h2>${esc(c.title)}</h2>
+      <div class="content">
+        ${contentHTML(reviewFlipped?c.back:c.front)}
+      </div>
+      <p class="muted">タップして裏返す</p>
+    </div>
+    ${reviewFlipped?`
+      <div class="row">
+        <button onclick="rateReview('忘れた')">忘れた</button>
+        <button onclick="rateReview('あやふや')">あやふや</button>
+        <button class="primary" onclick="rateReview('覚えた')">覚えた</button>
+      </div>
+      <p><button onclick="viewCard('${c.id}')">
+        詳細ノートを見る
+      </button></p>
+    `:""}
+  `;
+  renderMath();
+}
+
+function flipReview() {
+  reviewFlipped=!reviewFlipped;
+  showReview();
+}
+
+function rateReview(rating) {
+  const c=reviewList[reviewIndex];
+  c.reviews??=[];
+  c.reviews.push({rating,date:Date.now()});
+  if(!save()) return;
+  reviewIndex++;
+  reviewFlipped=false;
+  showReview();
+}
+
+function settings() {
+  document.getElementById("main").innerHTML=`
+    <h1>設定</h1>
+    <div class="card">
+      <h2>フォルダ管理</h2>
+      <div id="folders"></div>
+      <div class="row">
+        <input id="newFolder" placeholder="新しいフォルダ名"
+          style="flex:1">
+        <button onclick="addFolder()">追加</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>データ管理</h2>
+      <p class="muted">
+        ブラウザの保存データが消える場合に備えて、
+        定期的にバックアップしてください。
+      </p>
+      <div class="row">
+        <button onclick="exportData()">JSONを書き出す</button>
+        <button onclick="document.getElementById('importFile').click()">
+          JSONを読み込む
+        </button>
+      </div>
+    </div>
+  `;
+  showFolders();
+}
+
+function showFolders() {
+  document.getElementById("folders").innerHTML=
+    db.folders.map(f=>`
+      <span class="tag">${esc(f)}</span>
+    `).join("");
+}
+
+function addFolder() {
+  const name=document.getElementById("newFolder").value.trim();
+  if(!name||db.folders.includes(name)) return;
+  db.folders.push(name);
+  if(save()) settings();
+}
+
+function exportData() {
+  const blob=new Blob(
+    [JSON.stringify(db,null,2)],
+    {type:"application/json"}
+  );
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download="MathCards-backup.json";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+document.getElementById("importFile").addEventListener(
+  "change",async e=>{
+    const file=e.target.files[0];
+    if(!file) return;
+    try {
+      const data=JSON.parse(await file.text());
+      if(!Array.isArray(data.cards)||
+         !Array.isArray(data.folders)) {
+        throw new Error("形式が違います");
+      }
+      if(!confirm("現在のデータを置き換えますか？")) return;
+      const old=db;
+      db=data;
+      if(save()) {
+        alert("読み込みました。");
+        page("home");
+      } else db=old;
+    } catch(err) {
+      alert("読み込みに失敗しました。");
+    }
+    e.target.value="";
+  }
+);
+
+load();
+page("home");
+</script>
+</body>
+</html>
